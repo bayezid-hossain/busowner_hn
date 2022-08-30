@@ -16,6 +16,10 @@ const driverSchema = extendSchema(baseUserModel.schema, {
       "Please provide picture of Front side of your Driver\\'s NID",
     ],
   },
+  driverImage: {
+    type: String,
+    require: [true, 'Please provide picture of yourself (driver)'],
+  },
   NIDFront: {
     type: String,
     require: [

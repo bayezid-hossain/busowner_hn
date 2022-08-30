@@ -23,8 +23,6 @@ const {
 const router = express.Router();
 
 router.route('/api/v1/busowner/register').post(registerBusOwner);
-router.route('/api/v1/busowner/login').post(loginBusOwner);
-router.route('/api/v1/busowner/verify').post(isAuthenticatedUser, verifyOtp);
 router.route('/api/v1/busowner/me').get(isLoggedInUser, getUserDetails);
 router
   .route('/api/v1/busowner/upload/companyinfo')

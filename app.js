@@ -13,9 +13,7 @@ app.use(
   })
 );
 app.use(bodyParser.json());
-app.get('/hello', (req, res) => {
-  res.send('GET Request Called');
-});
+
 //Route Imports
 const busOwnerRoute = require('./routes/busOwnerRoute');
 app.use('', busOwnerRoute);

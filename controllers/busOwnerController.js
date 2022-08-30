@@ -512,14 +512,15 @@ exports.addDriver = catchAsyncErrors(async (req, res, next) => {
       const drivingLicense = files.drivingLicense;
       const NIDBack = files.NIDBack;
       const NIDFront = files.NIDFront;
+      const driverImage = files.driverImage;
       try {
         if (
           isFileValid(drivingLicense) &&
           isFileValid(NIDBack) &&
           isFileValid(NIDFront) &&
+          isFileValid(driverImage) &&
           fields.driverName &&
           fields.phoneNumber &&
-          fields.pin &&
           fields.licenseNumber
         ) {
           const validDriverPayload = {
@@ -549,16 +550,13 @@ exports.addDriver = catchAsyncErrors(async (req, res, next) => {
               NIDBack: 'tempURL',
               NIDFront: 'tempURL',
               phone: fields.phoneNumber,
-              pin: fields.pin,
+              driverImage: 'tempURL',
               licenseNumber: fields.licenseNumber,
               owner: req.user,
             };
 
             const newDriver = await axios
-              .post(
-                'http://44.202.73.200:8003/api/v1/driver/add',
-                newDriverPayload
-              )
+              .post('http://localhost:8003/api/v1/driver/add', newDriverPayload)
               .catch(function (error) {
                 if (error.errno == -111) {
                   profiler.done({
@@ -587,10 +585,11 @@ exports.addDriver = catchAsyncErrors(async (req, res, next) => {
 
               const resultOfDriverNIDBackUpload = await uploadFile(NIDBack);
               const resultOfDriverNIDFrontUpload = await uploadFile(NIDFront);
+              const resultOfDriverImageUpload = await uploadFile(driverImage);
               driver.driverLicense = resultofDriverLicenseUpload.Key;
               driver.NIDBack = resultOfDriverNIDBackUpload.Key;
               driver.NIDFront = resultOfDriverNIDFrontUpload.Key;
-
+              driver.driverImage = resultOfDriverImageUpload.Key;
               await driver.save({ validateBeforeSave: false });
               const owner = req.user;
               owner.drivers.push(driver);
@@ -638,6 +637,7 @@ exports.addDriver = catchAsyncErrors(async (req, res, next) => {
           deleteFile(drivingLicense.filepath);
           deleteFile(NIDBack.filepath);
           deleteFile(NIDFront.filepath);
+          deleteFile(driverImage.filepath);
         } catch (error) {}
       }
     })
