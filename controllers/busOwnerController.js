@@ -100,6 +100,14 @@ exports.loginBusOwner = catchAsyncErrors(async (req, res, next) => {
 
 exports.uploadCompanyInfo = catchAsyncErrors(async (req, res, next) => {
   const profiler = logger.startTimer();
+  if (req.body.formType) {
+    profiler.done({
+      message: 'cannot parse form data because its json',
+      level: 'error',
+      actionBy: req.user.id,
+    });
+    return next(new ErrorHandler('Please provide all Informations correctly'));
+  }
   const user = req.user;
   if (
     user.companyName &&
@@ -204,6 +212,14 @@ exports.uploadCompanyInfo = catchAsyncErrors(async (req, res, next) => {
 
 exports.uploadBusOwnerInfo = catchAsyncErrors(async (req, res, next) => {
   const profiler = logger.startTimer();
+  if (req.body.formType) {
+    profiler.done({
+      message: 'cannot parse form data because its json',
+      level: 'error',
+      actionBy: req.user.id,
+    });
+    return next(new ErrorHandler('Please provide all Informations correctly'));
+  }
   const user = req.user;
   if (
     user.merchantNumber &&
@@ -379,6 +395,14 @@ exports.getUserDetails = catchAsyncErrors(async (req, res, next) => {
 //add routes
 exports.createRoute = catchAsyncErrors(async (req, res, next) => {
   const profiler = logger.startTimer();
+  if (req.body.formType) {
+    profiler.done({
+      message: 'cannot parse form data because its json',
+      level: 'error',
+      actionBy: req.user.id,
+    });
+    return next(new ErrorHandler('Please provide all Informations correctly'));
+  }
 
   const busOwner = req.user;
   var form = new formidable.IncomingForm();
@@ -490,6 +514,14 @@ exports.createRoute = catchAsyncErrors(async (req, res, next) => {
 //add Driver
 exports.addDriver = catchAsyncErrors(async (req, res, next) => {
   const profiler = logger.startTimer();
+  if (req.body.formType) {
+    profiler.done({
+      message: 'cannot parse form data because its json',
+      level: 'error',
+      actionBy: req.user.id,
+    });
+    return next(new ErrorHandler('Please provide all Informations correctly'));
+  }
 
   var form = new formidable.IncomingForm();
   form.multiples = true;
@@ -530,7 +562,7 @@ exports.addDriver = catchAsyncErrors(async (req, res, next) => {
 
           const driverValidity = await axios
             .post(
-              'http://44.202.73.200:8006/api/v1/crosscheck/driver',
+              'http://localhost:8006/api/v1/crosscheck/driver',
               validDriverPayload
             )
             .catch(function (error) {
@@ -651,6 +683,12 @@ exports.addDriver = catchAsyncErrors(async (req, res, next) => {
         file.mimetype.split('/').pop();
     })
     .on('file', function (name, file) {});
+  profiler.done({
+    message: 'cannot parse form data',
+    level: 'error',
+    actionBy: req.user.id,
+  });
+  return next(new ErrorHandler('Please provide all Informations correctly'));
 });
 
 exports.logout = catchAsyncErrors(async (req, res, next) => {
@@ -712,8 +750,15 @@ exports.getAllRoutes = catchAsyncErrors(async (req, res, next) => {
 
 exports.addBus = catchAsyncErrors(async (req, res, next) => {
   const profiler = logger.startTimer();
+  if (req.body.formType) {
+    profiler.done({
+      message: 'cannot parse form data because its json',
+      level: 'error',
+      actionBy: req.user.id,
+    });
+    return next(new ErrorHandler('Please provide all Informations correctly'));
+  }
 
-  console.log(req.user.routes.length);
   if (req.user.routes.length == 0) {
     profiler.done({
       message: "Tried to add bus while there's no route added",
@@ -742,8 +787,15 @@ exports.addBus = catchAsyncErrors(async (req, res, next) => {
             error: err,
           });
         }
-        const { busName, busLicenseNumber, engineNumber, seatLayout, routeId } =
-          fields;
+        const {
+          busName,
+          busLicenseNumber,
+          engineNumber,
+          seatLayout,
+          routeId,
+          seatNumber,
+          ac,
+        } = fields;
         const { routePermit, busLicenseDoc } = files;
 
         try {
@@ -751,18 +803,20 @@ exports.addBus = catchAsyncErrors(async (req, res, next) => {
             isFileValid(routePermit) &&
             isFileValid(busLicenseDoc) &&
             busName &&
+            seatNumber &&
             busLicenseNumber &&
             engineNumber &&
             seatLayout &&
             routeId
           ) {
-            if (checkValidRoute(routeId, req.user.id)) {
-            } else {
+            isRouteValid = await checkValidRoute(routeId, req.user.id);
+            if (!isRouteValid) {
               profiler.done({
                 message: 'Invalid route id' + routeId + ' given ',
                 level: 'error',
                 actionBy: req.user.id,
               });
+              return next(new ErrorHandler('Invalid route id ' + routeId));
             }
             const validBusPayload = {
               busNo: busLicenseNumber,
@@ -772,7 +826,7 @@ exports.addBus = catchAsyncErrors(async (req, res, next) => {
 
             const busValidity = await axios
               .post(
-                'http://44.202.73.200:8006/api/v1/crosscheck/bus',
+                'http://localhost:8006/api/v1/crosscheck/bus',
                 validBusPayload
               )
               .catch(function (error) {
@@ -787,21 +841,19 @@ exports.addBus = catchAsyncErrors(async (req, res, next) => {
               });
             if (busValidity.data.result == true) {
               const newBusPayload = {
-                name: fields.driverName,
-                driverLicense: 'tempURL',
-                NIDBack: 'tempURL',
-                NIDFront: 'tempURL',
-                phone: fields.phoneNumber,
-                pin: fields.pin,
-                licenseNumber: fields.licenseNumber,
-                owner: req.user,
+                busName: busName,
+                busLicenseDoc: 'tempUrl',
+                busLicenseNumber: busLicenseNumber,
+                engineNumber: engineNumber,
+                ac: ac ? ac : false,
+                seatNumber: seatNumber,
+                seatLayout: seatLayout,
+                routeId: routeId,
+                owner: req.user.id,
               };
 
               const newBus = await axios
-                .post(
-                  'http://44.202.73.200:8003/api/v1/driver/add',
-                  newBusPayload
-                )
+                .post('http://localhost:8004/api/v1/bus/add', newBusPayload)
                 .catch(function (error) {
                   if (error.errno == -111) {
                     profiler.done({
@@ -894,7 +946,12 @@ exports.addBus = catchAsyncErrors(async (req, res, next) => {
 
 //check valid route
 const checkValidRoute = async (routeId, authorityId) => {
-  let route = await BusRoute.findById(routeId).select('authorityId');
+  let route;
+  try {
+    route = await BusRoute.findById(routeId).select('authorityId');
+  } catch (error) {
+    return false;
+  }
 
   if (route && route.authorityId == authorityId) return true;
   else return false;
