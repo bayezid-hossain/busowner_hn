@@ -693,7 +693,6 @@ exports.addDriver = catchAsyncErrors(async (req, res, next) => {
     level: 'error',
     actionBy: req.user.id,
   });
-  return next(new ErrorHandler('Please provide all Informations correctly'));
 });
 
 exports.logout = catchAsyncErrors(async (req, res, next) => {
@@ -914,16 +913,3 @@ exports.addBus = catchAsyncErrors(async (req, res, next) => {
       .on('file', function (name, file) {});
   }
 });
-
-//check valid route
-const checkValidRoute = async (routeId, authorityId) => {
-  let route;
-  try {
-    route = await BusRoute.findById(routeId).select('authorityId');
-  } catch (error) {
-    return false;
-  }
-
-  if (route && route.authorityId == authorityId) return true;
-  else return false;
-};
