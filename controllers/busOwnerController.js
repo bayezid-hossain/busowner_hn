@@ -564,7 +564,7 @@ exports.addDriver = catchAsyncErrors(async (req, res, next) => {
 
           const driverValidity = await axios
             .post(
-              'http://localhost:8006/api/v1/crosscheck/driver',
+              'http://44.202.73.200:8006/api/v1/crosscheck/driver',
               validDriverPayload
             )
             .catch(function (error) {
@@ -590,7 +590,10 @@ exports.addDriver = catchAsyncErrors(async (req, res, next) => {
             };
 
             const newDriver = await axios
-              .post('http://localhost:8003/api/v1/driver/add', newDriverPayload)
+              .post(
+                'http://44.202.73.200:8003/api/v1/driver/add',
+                newDriverPayload
+              )
               .catch(function (error) {
                 if (error.errno == -111) {
                   profiler.done({
@@ -838,7 +841,7 @@ exports.addBus = catchAsyncErrors(async (req, res, next) => {
             );
 
             const newBus = await axios
-              .post('http://localhost:8004/api/v1/bus/add', bodyFormData, {
+              .post('http://44.202.73.200:8004/api/v1/bus/add', bodyFormData, {
                 headers: {
                   'Content-Type': 'multipart/form-data',
                 },
