@@ -9,8 +9,10 @@ const { generateOtp, sendOtp } = require('../utils/sendSms');
 const path = require('path');
 const Driver = require('../models/driverModel');
 const BusRoute = require('../models/busRouteModel');
+const fs = require('fs');
 const Bus = require('../models/busModel');
 const { v4: uuid } = require('uuid');
+const FormData = require('form-data');
 // const amqp = require('amqplib');
 const axios = require('axios');
 const logger = require('../logger/index');
@@ -748,6 +750,7 @@ exports.getAllRoutes = catchAsyncErrors(async (req, res, next) => {
   });
 });
 
+//add bus
 exports.addBus = catchAsyncErrors(async (req, res, next) => {
   const profiler = logger.startTimer();
   if (req.body.formType) {
@@ -809,100 +812,66 @@ exports.addBus = catchAsyncErrors(async (req, res, next) => {
             seatLayout &&
             routeId
           ) {
-            isRouteValid = await checkValidRoute(routeId, req.user.id);
-            if (!isRouteValid) {
-              profiler.done({
-                message: 'Invalid route id' + routeId + ' given ',
-                level: 'error',
-                actionBy: req.user.id,
-              });
-              return next(new ErrorHandler('Invalid route id ' + routeId));
-            }
-            const validBusPayload = {
-              busNo: busLicenseNumber,
-              engNo: engineNumber,
-              ownerName: req.user.name,
-            };
+            var bodyFormData = new FormData();
+            bodyFormData.append('busName', busName);
+            bodyFormData.append('busLicenseNumber', busLicenseNumber);
+            bodyFormData.append('ownerName', req.user.name);
+            bodyFormData.append('engineNumber', engineNumber);
+            bodyFormData.append('seatNumber', seatNumber);
+            bodyFormData.append('seatLayout', seatLayout);
+            bodyFormData.append('routeId', routeId);
+            bodyFormData.append('owner', req.user.id);
+            bodyFormData.append('ac', ac ? ac.toString() : 'false');
+            bodyFormData.append(
+              'routePermit',
+              fs.readFileSync(routePermit.filepath, 'utf-8'),
+              routePermit.newFilename +
+                '.' +
+                routePermit.mimetype.split('/').pop()
+            );
+            bodyFormData.append(
+              'busLicenseDoc',
+              fs.readFileSync(busLicenseDoc.filepath, 'utf-8'),
+              busLicenseDoc.newFilename +
+                '.' +
+                busLicenseDoc.mimetype.split('/').pop()
+            );
 
-            const busValidity = await axios
-              .post(
-                'http://localhost:8006/api/v1/crosscheck/bus',
-                validBusPayload
-              )
+            const newBus = await axios
+              .post('http://localhost:8004/api/v1/bus/add', bodyFormData, {
+                headers: {
+                  'Content-Type': 'multipart/form-data',
+                },
+              })
               .catch(function (error) {
-                profiler.done({
-                  message: error,
-                  level: 'error',
-                  actionBy: req.user.id,
-                });
-                return next(
-                  new ErrorHandler('Validation Service not Responding')
-                );
+                if (error.errno == -111) {
+                  profiler.done({
+                    message: 'Bus Service Not Responding',
+                    level: 'error',
+                    actionBy: req.user.id,
+                  });
+                  return next(new ErrorHandler('Bus Service Not Responding'));
+                } else {
+                  profiler.done({
+                    message: error.response.data.message,
+                    level: 'error',
+                    actionBy: req.user.id,
+                  });
+
+                  return next(new ErrorHandler(error.response.data.message));
+                }
               });
-            if (busValidity.data.result == true) {
-              const newBusPayload = {
-                busName: busName,
-                busLicenseDoc: 'tempUrl',
-                busLicenseNumber: busLicenseNumber,
-                engineNumber: engineNumber,
-                ac: ac ? ac : false,
-                seatNumber: seatNumber,
-                seatLayout: seatLayout,
-                routeId: routeId,
-                owner: req.user.id,
-              };
-
-              const newBus = await axios
-                .post('http://localhost:8004/api/v1/bus/add', newBusPayload)
-                .catch(function (error) {
-                  if (error.errno == -111) {
-                    profiler.done({
-                      message: 'Bus Service Not Responding',
-                      level: 'error',
-                      actionBy: req.user.id,
-                    });
-                    return next(new ErrorHandler('Bus Service Not Responding'));
-                  } else {
-                    profiler.done({
-                      message: error.response.data.message,
-                      level: 'error',
-                      actionBy: req.user.id,
-                    });
-
-                    return next(new ErrorHandler(error.response.data.message));
-                  }
-                });
-              if (newBus) {
-                const bus = await Bus.findById(newBus.data.user._id);
-                const resultOfRoutePermitUpload = await uploadFile(routePermit);
-
-                const resultOfBusLicenseDocUpload = await uploadFile(
-                  busLicenseDoc
-                );
-                bus.routePermit = resultOfRoutePermitUpload.Key;
-                bus.busLicense = resultOfBusLicenseDocUpload.Key;
-
-                await bus.save({ validateBeforeSave: false });
-                const owner = req.user;
-                owner.buses.push(bus);
-                owner.save();
-                res.status(200).json({
-                  success: true,
-                  message: 'Driver Account created successfully',
-                  bus,
-                });
-                profiler.done({
-                  message: `Created Bus ${bus.id} by Authority ${owner.id}`,
-                });
-              }
-            } else {
+            if (newBus) {
+              const owner = req.user;
+              owner.buses.push(newBus.data.bus);
+              owner.save();
+              res.status(200).json({
+                success: true,
+                message: 'Bus created successfully',
+                bus: newBus.data.bus,
+              });
               profiler.done({
-                message: busValidity.data.message,
-                level: 'error',
-                actionBy: req.user.id,
-              });
-              res.status(400).json({
-                msg: busValidity.data.message,
+                message: `Created Bus ${newBus.data.bus._id} by Authority ${owner.id}`,
               });
             }
           } else {
@@ -932,10 +901,9 @@ exports.addBus = catchAsyncErrors(async (req, res, next) => {
         }
       })
       .on('fileBegin', function (name, file) {
-        file.newFilename = uuid();
+        file.newFilename = Date.now() + uuid();
         file.filepath =
           path.join(__dirname, '../') +
-          Date.now() +
           file.newFilename +
           '.' +
           file.mimetype.split('/').pop();
