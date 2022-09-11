@@ -26,77 +26,7 @@ let channel;
 // }
 // connect();
 
-//Register a busOwner
-
-exports.registerBusOwner = catchAsyncErrors(async (req, res, next) => {
-  const { name, phone, pin, email } = req.body;
-
-  const user = await User.create({
-    name,
-    phone,
-    email,
-    pin,
-    role: 'busOwner',
-  });
-
-  logger.warning(` ${user.name} : ${user.phone} (${user._id}) registered!`);
-  res.redirect(307, '/api/v1/busowner/login');
-  // sendToken(user, 201, res);
-});
-
 //login module for bus owner
-exports.loginBusOwner = catchAsyncErrors(async (req, res, next) => {
-  //checking if user has given pin and phone both
-  const profiler = logger.startTimer();
-  const { email, phone, pin } = req.body;
-  if (!email && !phone) {
-    return next(new ErrorHandler('Invalid login information', 400));
-  }
-
-  let user = phone
-    ? await User.findOne({
-        phone,
-      }).select('+pin')
-    : await User.findOne({ email }).select('+pin');
-
-  if (!user) {
-    return next(new ErrorHandler('Invalid login information', 401));
-  }
-  const ispinMatched = await user.comparepin(pin);
-
-  if (!ispinMatched) {
-    logger.log(
-      'warning',
-      `Invalid pin given for ${
-        phone ? 'phone number : ' + phone : 'email : ' + email
-      }`
-    );
-    return next(new ErrorHandler('Invalid login information', 401));
-  }
-  const otp = generateOtp();
-  const update = {
-    otp: otp,
-    otpExpire: Date.now() + 5 * 60000,
-  };
-
-  user = phone
-    ? await User.findOneAndUpdate({ phone }, update, {
-        new: true,
-        runValidators: true,
-        useFindAndModify: false,
-      }).select('id otp phone name')
-    : await User.findOneAndUpdate({ email }, update, {
-        new: true,
-        runValidators: true,
-        useFindAndModify: false,
-      }).select('id otp phone name'); //sending otp for testing purposes
-  //console.log(jk.otp);
-  profiler.done({
-    message: `User ${user.name} (${user.phone}) requested login otp`,
-  });
-  sendOtp(user.phone, otp);
-  sendToken(user, 200, res);
-});
 
 //upload company information name,tin,trade
 
@@ -338,39 +268,6 @@ exports.uploadBusOwnerInfo = catchAsyncErrors(async (req, res, next) => {
     .on('file', function (name, file) {});
 });
 
-//verify OTP for busowner
-exports.verifyOtp = catchAsyncErrors(async (req, res, next) => {
-  const profiler = logger.startTimer();
-  if (!req.user) {
-    return next(new ErrorHandler('Unauthorized request'));
-  }
-  const id = req.user.id;
-  const user = await User.findOne({
-    id: id,
-    otpExpire: { $gt: Date.now() },
-  }).populate('drivers routes');
-  if (!user) {
-    return next(new ErrorHandler('Otp is invalid or has expired', 400));
-  }
-  if (req.body.otp !== user.otp) {
-    profiler.done({
-      message: `Invalid otp tried for ${user.name} (${user.phone}) !`,
-      level: 'warning',
-    });
-    return next(new ErrorHandler('Otp is invalid or has expired', 400));
-  }
-
-  user.otp = undefined;
-  user.otpExpire = undefined;
-  user.loggedIn = true;
-  await user.save({ validateBeforeSave: false });
-
-  sendToken(user, 200, res);
-  profiler.done({
-    message: `User ${user.name} (${user.phone}) logged in!`,
-  });
-});
-
 //get personal info of logged in user
 exports.getUserDetails = catchAsyncErrors(async (req, res, next) => {
   const profiler = logger.startTimer();
@@ -425,29 +322,17 @@ exports.createRoute = catchAsyncErrors(async (req, res, next) => {
         });
       }
       const file1 = files.routePermit;
+      const { routeName, stations, numberOfStations, layouts } = fields;
       try {
         if (
           isFileValid(file1) &&
-          fields.routeName &&
-          fields.stations &&
-          fields.numberOfStations &&
-          fields.type &&
-          fields.travelTimings
+          routeName &&
+          stations &&
+          numberOfStations &&
+          layouts
         ) {
-          if (fields.type == 2 && fields.preBookBusSeatNo == undefined) {
-            profiler.done({
-              message: `Route selected as prebook but no prebook bus seat number provided`,
-              level: 'error',
-              actionBy: busOwner.id,
-            });
-            return next(
-              new ErrorHandler(
-                `Route selected as prebook but no prebook bus seat number provided`
-              )
-            );
-          }
-          const stationsObject = JSON.parse(fields.stations);
-          const travelTimings = JSON.parse(fields.travelTimings);
+          const stationsObject = JSON.parse(stations);
+          const layout = JSON.parse(layouts);
           const routePermitProfiler = logger.startTimer();
           const resultOfRoutePermitUpload = await uploadFile(file1);
           routePermitProfiler.done({
@@ -459,11 +344,8 @@ exports.createRoute = catchAsyncErrors(async (req, res, next) => {
             stations: fields.numberOfStations,
             stationList: stationsObject,
             routePermitDoc: resultOfRoutePermitUpload.Key,
-            type: fields.type,
-            authorityId: req.user,
-            travelTimings: travelTimings,
-            preBookBusNo:
-              fields.preBookBusNo != undefined ? fields.preBookBusNo : null,
+            authorityId: req.user.id,
+            layouts: layout,
           });
           busOwner.routes.push(busRoute);
           busOwner.save();
@@ -471,6 +353,7 @@ exports.createRoute = catchAsyncErrors(async (req, res, next) => {
           res.status(200).json({
             success: true,
             message: 'Bus Route added Successfully',
+            route: busRoute,
           });
 
           profiler.done({
@@ -543,111 +426,85 @@ exports.addDriver = catchAsyncErrors(async (req, res, next) => {
           error: err,
         });
       }
-      const drivingLicense = files.drivingLicense;
-      const NIDBack = files.NIDBack;
-      const NIDFront = files.NIDFront;
-      const driverImage = files.driverImage;
+      const { driverName, phoneNumber, licenseNumber, NIDNumber } = fields;
+      const { drivingLicense, NIDBack, NIDFront, driverImage } = files;
       try {
         if (
-          isFileValid(drivingLicense) &&
-          isFileValid(NIDBack) &&
-          isFileValid(NIDFront) &&
-          isFileValid(driverImage) &&
-          fields.driverName &&
-          fields.phoneNumber &&
-          fields.licenseNumber
+          (isFileValid(drivingLicense) &&
+            isFileValid(NIDBack) &&
+            isFileValid(NIDFront) &&
+            isFileValid(driverImage) &&
+            driverName,
+          phoneNumber,
+          NIDNumber,
+          licenseNumber)
         ) {
-          const validDriverPayload = {
-            driverName: fields.driverName,
-            licenseNumber: fields.licenseNumber,
-          };
+          var bodyFormData = new FormData();
+          bodyFormData.append('driverName', driverName);
+          bodyFormData.append('phoneNumber', phoneNumber);
+          bodyFormData.append('NIDNumber', NIDNumber);
+          bodyFormData.append('licenseNumber', licenseNumber);
+          bodyFormData.append('owner', req.user.id);
+          bodyFormData.append(
+            'drivingLicense',
+            fs.readFileSync(drivingLicense.filepath, 'utf-8'),
+            drivingLicense.newFilename +
+              '.' +
+              drivingLicense.mimetype.split('/').pop()
+          );
+          bodyFormData.append(
+            'NIDBack',
+            fs.readFileSync(NIDBack.filepath, 'utf-8'),
+            NIDBack.newFilename + '.' + NIDBack.mimetype.split('/').pop()
+          );
+          bodyFormData.append(
+            'driverImage',
+            fs.readFileSync(driverImage.filepath, 'utf-8'),
+            driverImage.newFilename +
+              '.' +
+              driverImage.mimetype.split('/').pop()
+          );
+          bodyFormData.append(
+            'NIDFront',
+            fs.readFileSync(NIDFront.filepath, 'utf-8'),
+            NIDFront.newFilename + '.' + NIDFront.mimetype.split('/').pop()
+          );
 
-          const driverValidity = await axios
-            .post(
-              'http://44.202.73.200:8006/api/v1/crosscheck/driver',
-              validDriverPayload
-            )
+          const newDriver = await axios
+            .post('http://localhost:8003/api/v1/driver/add', bodyFormData, {
+              headers: {
+                'Content-Type': 'multipart/form-data',
+              },
+            })
             .catch(function (error) {
-              profiler.done({
-                message: error,
-                level: 'error',
-                actionBy: req.user.id,
-              });
-              return next(
-                new ErrorHandler('Validation Service not Responding')
-              );
+              if (error.errno == -111) {
+                profiler.done({
+                  message: 'Driver Service Not Responding',
+                  level: 'error',
+                  actionBy: req.user.id,
+                });
+                return next(new ErrorHandler('Driver Service Not Responding'));
+              } else {
+                profiler.done({
+                  message: error.response.data.message,
+                  level: 'error',
+                  actionBy: req.user.id,
+                });
+
+                return next(new ErrorHandler(error.response.data.message));
+              }
             });
-          if (driverValidity.data.result == true) {
-            const newDriverPayload = {
-              name: fields.driverName,
-              driverLicense: 'tempURL',
-              NIDBack: 'tempURL',
-              NIDFront: 'tempURL',
-              phone: fields.phoneNumber,
-              driverImage: 'tempURL',
-              licenseNumber: fields.licenseNumber,
-              owner: req.user,
-            };
-
-            const newDriver = await axios
-              .post(
-                'http://44.202.73.200:8003/api/v1/driver/add',
-                newDriverPayload
-              )
-              .catch(function (error) {
-                if (error.errno == -111) {
-                  profiler.done({
-                    message: 'Driver Service Not Responding',
-                    level: 'error',
-                    actionBy: req.user.id,
-                  });
-                  return next(
-                    new ErrorHandler('Driver Service Not Responding')
-                  );
-                } else {
-                  profiler.done({
-                    message: error.response.data.message,
-                    level: 'error',
-                    actionBy: req.user.id,
-                  });
-
-                  return next(new ErrorHandler(error.response.data.message));
-                }
-              });
-            if (newDriver) {
-              const driver = await Driver.findById(newDriver.data.user._id);
-              const resultofDriverLicenseUpload = await uploadFile(
-                drivingLicense
-              );
-
-              const resultOfDriverNIDBackUpload = await uploadFile(NIDBack);
-              const resultOfDriverNIDFrontUpload = await uploadFile(NIDFront);
-              const resultOfDriverImageUpload = await uploadFile(driverImage);
-              driver.driverLicense = resultofDriverLicenseUpload.Key;
-              driver.NIDBack = resultOfDriverNIDBackUpload.Key;
-              driver.NIDFront = resultOfDriverNIDFrontUpload.Key;
-              driver.driverImage = resultOfDriverImageUpload.Key;
-              await driver.save({ validateBeforeSave: false });
-              const owner = req.user;
-              owner.drivers.push(driver);
-              owner.save();
-              res.status(200).json({
-                success: true,
-                message: 'Driver Account created successfully',
-                driver,
-              });
-              profiler.done({
-                message: `Created Driver ${driver.id} by Authority ${owner.id}`,
-              });
-            }
-          } else {
+          if (newDriver) {
+            const owner = req.user;
+            owner.drivers.push(newDriver.data.driver);
+            owner.save();
+            res.status(200).json({
+              success: true,
+              message: 'Driver created successfully',
+              driver: newDriver.data.driver,
+            });
             profiler.done({
-              message: driverValidity.data.message,
-              level: 'error',
-              actionBy: req.user.id,
-            });
-            res.status(400).json({
-              msg: driverValidity.data.message,
+              message: `Created Driver ${newDriver.data.driver._id} by Authority ${owner.id}`,
             });
           }
         } else {

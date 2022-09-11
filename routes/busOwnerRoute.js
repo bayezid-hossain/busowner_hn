@@ -21,8 +21,6 @@ const {
 } = require('../middleware/auth');
 
 const router = express.Router();
-
-router.route('/api/v1/busowner/register').post(registerBusOwner);
 router.route('/api/v1/busowner/me').get(isLoggedInUser, getUserDetails);
 router
   .route('/api/v1/busowner/upload/companyinfo')

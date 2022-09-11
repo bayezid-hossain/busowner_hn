@@ -14,6 +14,11 @@ const busRouteSchema = new mongoose.Schema({
       type: Object,
     },
   ],
+  layouts: [
+    {
+      type: Object,
+    },
+  ],
   routePermitDoc: {
     type: String,
     default: 'none',
@@ -22,14 +27,7 @@ const busRouteSchema = new mongoose.Schema({
     type: mongoose.Schema.ObjectId,
     ref: 'busOwner',
   },
-  travelTimings: [
-    {
-      type: Object,
-    },
-  ],
-  preBookBusSeatNo: {
-    type: Number,
-  },
+
   approvalStatus: {
     type: String,
     default: 'pending',
