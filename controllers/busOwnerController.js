@@ -471,13 +471,13 @@ exports.addDriver = catchAsyncErrors(async (req, res, next) => {
           );
 
           const newDriver = await axios
-            .post('http://localhost:8003/api/v1/driver/add', bodyFormData, {
+            .post('http://44.202.73.200:8003/api/v1/driver/add', bodyFormData, {
               headers: {
                 'Content-Type': 'multipart/form-data',
               },
             })
             .catch(function (error) {
-              if (error.errno == -111) {
+              if (error.errno == -111 || error.errno == -110) {
                 profiler.done({
                   message: 'Driver Service Not Responding',
                   level: 'error',
@@ -486,12 +486,20 @@ exports.addDriver = catchAsyncErrors(async (req, res, next) => {
                 return next(new ErrorHandler('Driver Service Not Responding'));
               } else {
                 profiler.done({
-                  message: error.response.data.message,
+                  message: error.response.data
+                    ? error.response.data.message
+                    : error,
                   level: 'error',
                   actionBy: req.user.id,
                 });
 
-                return next(new ErrorHandler(error.response.data.message));
+                return next(
+                  new ErrorHandler(
+                    error.response.data
+                      ? error.response.data.message
+                      : error.message
+                  )
+                );
               }
             });
           if (newDriver) {
@@ -545,11 +553,6 @@ exports.addDriver = catchAsyncErrors(async (req, res, next) => {
         file.mimetype.split('/').pop();
     })
     .on('file', function (name, file) {});
-  profiler.done({
-    message: 'cannot parse form data',
-    level: 'error',
-    actionBy: req.user.id,
-  });
 });
 
 exports.logout = catchAsyncErrors(async (req, res, next) => {
@@ -703,7 +706,7 @@ exports.addBus = catchAsyncErrors(async (req, res, next) => {
                 },
               })
               .catch(function (error) {
-                if (error.errno == -111) {
+                if (error.errno == -111 || error.errno == -110) {
                   profiler.done({
                     message: 'Bus Service Not Responding',
                     level: 'error',
@@ -712,12 +715,20 @@ exports.addBus = catchAsyncErrors(async (req, res, next) => {
                   return next(new ErrorHandler('Bus Service Not Responding'));
                 } else {
                   profiler.done({
-                    message: error.response.data.message,
+                    message: error.response.data
+                      ? error.response.data.message
+                      : error,
                     level: 'error',
                     actionBy: req.user.id,
                   });
 
-                  return next(new ErrorHandler(error.response.data.message));
+                  return next(
+                    new ErrorHandler(
+                      error.response.data
+                        ? error.response.data.message
+                        : error.message
+                    )
+                  );
                 }
               });
             if (newBus) {
