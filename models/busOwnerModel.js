@@ -3,7 +3,6 @@ const validator = require('validator');
 const baseUserModel = require('./userBaseModel');
 const cryptPassword = require('../utils/cryptPass');
 const extendSchema = require('mongoose-extend-schema');
-const Driver = require('./driverModel');
 const busOwnerSchema = extendSchema(baseUserModel.schema, {
   companyName: {
     type: String,

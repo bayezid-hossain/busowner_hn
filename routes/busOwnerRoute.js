@@ -1,10 +1,8 @@
 const express = require('express');
 const {
-  registerBusOwner,
   uploadCompanyInfo,
+  getAllBuses,
   uploadBusOwnerInfo,
-  loginBusOwner,
-  verifyOtp,
   getUserDetails,
   createRoute,
   addDriver,
@@ -12,6 +10,7 @@ const {
   logout,
   getAllDrivers,
   getAllRoutes,
+  checkValidBus,
 } = require('../controllers/busOwnerController');
 const {
   authorizeRoles,
@@ -74,6 +73,21 @@ router
     isLoggedInUser,
     [approvalStatus('approved'), authorizeRoles('[busOwner]')],
     getAllRoutes
+  );
+router
+  .route('/api/v1/busowner/buses')
+  .get(
+    isLoggedInUser,
+    [approvalStatus('approved'), authorizeRoles('[busOwner]')],
+    getAllBuses
+  );
+
+router
+  .route('/api/v1/busowner/checkvalidbus')
+  .post(
+    isLoggedInUser,
+    [approvalStatus('approved'), authorizeRoles('[busOwner]')],
+    checkValidBus
   );
 
 router.route('/api/v1/busowner/logout').get(isLoggedInUser, logout);

@@ -16,17 +16,6 @@ const FormData = require('form-data');
 // const amqp = require('amqplib');
 const axios = require('axios');
 const logger = require('../logger/index');
-let channel;
-//rabbitmq queue creation
-// async function connect() {
-//   const amqpServer = process.env.RABBITMQ_URL;
-//   const connection = await amqp.connect(amqpServer);
-//   channel = await connection.createChannel();
-//   await channel.assertQueue('ADDEDDRIVER');
-// }
-// connect();
-
-//login module for bus owner
 
 //upload company information name,tin,trade
 
@@ -477,29 +466,48 @@ exports.addDriver = catchAsyncErrors(async (req, res, next) => {
               },
             })
             .catch(function (error) {
-              if (error.errno == -111 || error.errno == -110) {
+              try {
+                if (error.errno == -111 || error.errno == -110) {
+                  profiler.done({
+                    message: 'Driver Service Not Responding',
+                    level: 'error',
+                    actionBy: req.user.id,
+                  });
+                  return next(
+                    new ErrorHandler('Driver Service Not Responding')
+                  );
+                } else if (error.response.status == 400) {
+                  profiler.done({
+                    message: error.response.data.message,
+                    level: 'error',
+                    actionBy: req.user.id,
+                  });
+                  return next(new ErrorHandler(error.response.data.message));
+                } else {
+                  profiler.done({
+                    message: error.response.data
+                      ? error.response.data.message
+                      : error,
+                    level: 'error',
+                    actionBy: req.user.id,
+                  });
+
+                  return next(
+                    new ErrorHandler(
+                      error.response.data
+                        ? error.response.data.message
+                        : error.message
+                    )
+                  );
+                }
+              } catch (error) {
                 profiler.done({
-                  message: 'Driver Service Not Responding',
-                  level: 'error',
-                  actionBy: req.user.id,
-                });
-                return next(new ErrorHandler('Driver Service Not Responding'));
-              } else {
-                profiler.done({
-                  message: error.response.data
-                    ? error.response.data.message
-                    : error,
+                  message: error,
                   level: 'error',
                   actionBy: req.user.id,
                 });
 
-                return next(
-                  new ErrorHandler(
-                    error.response.data
-                      ? error.response.data.message
-                      : error.message
-                  )
-                );
+                return next(new ErrorHandler(error));
               }
             });
           if (newDriver) {
@@ -514,6 +522,10 @@ exports.addDriver = catchAsyncErrors(async (req, res, next) => {
             profiler.done({
               message: `Created Driver ${newDriver.data.driver._id} by Authority ${owner.id}`,
             });
+          } else {
+            return next(
+              new ErrorHandler(`Please provide all Informations correctly`)
+            );
           }
         } else {
           profiler.done({
@@ -531,9 +543,7 @@ exports.addDriver = catchAsyncErrors(async (req, res, next) => {
           level: 'error',
           actionBy: req.user.id,
         });
-        return next(
-          new ErrorHandler('Please provide all Informations correctly')
-        );
+        return next(new ErrorHandler(error.message ? error.message : error));
       } finally {
         try {
           deleteFile(drivingLicense.filepath);
@@ -779,5 +789,50 @@ exports.addBus = catchAsyncErrors(async (req, res, next) => {
           file.mimetype.split('/').pop();
       })
       .on('file', function (name, file) {});
+  }
+});
+
+exports.getAllBuses = catchAsyncErrors(async (req, res, next) => {
+  const profiler = logger.startTimer();
+  const ownerWithBuses = await User.findById(req.user.id)
+    .select('buses')
+    .populate('buses');
+
+  profiler.done({
+    message: `Authority requested its bus' information `,
+    level: 'info',
+    actionBy: req.user.id,
+  });
+  res.status(200).json({
+    success: true,
+    buses: ownerWithBuses.buses,
+  });
+});
+
+exports.checkValidBus = catchAsyncErrors(async (req, res, next) => {
+  const { busLicenseNumber, engineNumber } = req.body;
+  const validBusPayload = {
+    busNo: busLicenseNumber,
+    engNo: engineNumber,
+  };
+
+  const busValidity = await axios
+    .post('http://44.202.73.200:8006/api/v1/crosscheck/bus', validBusPayload)
+    .catch(function (error) {
+      profiler.done({
+        message: error,
+        level: 'error',
+        actionBy: owner,
+      });
+      return next(new ErrorHandler('Validation Service not Responding'));
+    });
+  if (busValidity.data.bus) {
+    res.status(200).json({
+      success: true,
+      message: 'Bus Valid',
+      seatNumber: busValidity.data.bus.seatNumber,
+    });
+  } else {
+    res.status(400).json({ success: false, message: 'Bus Not Valid' });
   }
 });

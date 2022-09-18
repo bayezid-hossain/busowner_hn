@@ -4,7 +4,7 @@ const busSchema = new mongoose.Schema({
   busName: {
     type: String,
     required: [true, 'Please Enter Bus Name'],
-    unique: [true, 'This Bus Name Already Exists'],
+    unique: [false, 'This Bus Name Already Exists'],
     maxlength: [30, 'Name cannot exceed 30 characters'],
     minlength: [4, 'Name should have more than 4 characters'],
   },
