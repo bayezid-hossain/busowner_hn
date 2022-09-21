@@ -311,17 +311,19 @@ exports.createRoute = catchAsyncErrors(async (req, res, next) => {
         });
       }
       const file1 = files.routePermit;
-      const { routeName, stations, numberOfStations, layouts } = fields;
+      const { routeName, stations, numberOfStations, layouts, info } = fields;
       try {
         if (
           isFileValid(file1) &&
           routeName &&
           stations &&
           numberOfStations &&
-          layouts
+          layouts &&
+          info
         ) {
           const stationsObject = JSON.parse(stations);
           const layout = JSON.parse(layouts);
+          const information = JSON.parse(info);
           const routePermitProfiler = logger.startTimer();
           const resultOfRoutePermitUpload = await uploadFile(file1);
           routePermitProfiler.done({
@@ -335,6 +337,7 @@ exports.createRoute = catchAsyncErrors(async (req, res, next) => {
             routePermitDoc: resultOfRoutePermitUpload.Key,
             authorityId: req.user.id,
             layouts: layout,
+            info: information,
           });
           busOwner.routes.push(busRoute);
           busOwner.save();
@@ -460,11 +463,15 @@ exports.addDriver = catchAsyncErrors(async (req, res, next) => {
           );
 
           const newDriver = await axios
-            .post('http://44.202.73.200:8003/api/v1/driver/add', bodyFormData, {
-              headers: {
-                'Content-Type': 'multipart/form-data',
-              },
-            })
+            .post(
+              'http://18.213.177.252:8003/api/v1/driver/add',
+              bodyFormData,
+              {
+                headers: {
+                  'Content-Type': 'multipart/form-data',
+                },
+              }
+            )
             .catch(function (error) {
               try {
                 if (error.errno == -111 || error.errno == -110) {
@@ -710,7 +717,7 @@ exports.addBus = catchAsyncErrors(async (req, res, next) => {
             );
 
             const newBus = await axios
-              .post('http://44.202.73.200:8004/api/v1/bus/add', bodyFormData, {
+              .post('http://18.213.177.252:8004/api/v1/bus/add', bodyFormData, {
                 headers: {
                   'Content-Type': 'multipart/form-data',
                 },
@@ -817,7 +824,7 @@ exports.checkValidBus = catchAsyncErrors(async (req, res, next) => {
   };
 
   const busValidity = await axios
-    .post('http://44.202.73.200:8006/api/v1/crosscheck/bus', validBusPayload)
+    .post('http://18.213.177.252:8006/api/v1/crosscheck/bus', validBusPayload)
     .catch(function (error) {
       profiler.done({
         message: error,

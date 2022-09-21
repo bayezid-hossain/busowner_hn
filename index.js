@@ -1,7 +1,5 @@
 const app = require('./app');
-const https = require('https');
-const path = require('path');
-const fs = require('fs');
+const dotenv = require('dotenv');
 const connectDatabase = require('./config/database');
 
 //Handling Uncaught Exception
@@ -20,16 +18,9 @@ process.on('uncaughtException', (err) => {
 
 //Connecting to database
 connectDatabase();
-const sslServer = https.createServer(
-  {
-    key: fs.readFileSync(path.join(__dirname, 'cert', 'key.pem')),
-    cer: fs.readFileSync(path.join(__dirname, 'cert', 'cert.pem')),
-  },
-  app
-);
-sslServer.listen(process.env.BUSOWNERPORT, () =>
-  console.log(`busowner is listening to localhost:${process.env.BUSOWNERPORT}`)
-);
+const server = app.listen(process.env.BUSOWNERPORT, () => {
+  console.log(`busowner is listening to localhost:${process.env.BUSOWNERPORT}`);
+});
 
 // Unhandled Promise Rejection
 

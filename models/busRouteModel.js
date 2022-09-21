@@ -19,6 +19,11 @@ const busRouteSchema = new mongoose.Schema({
       type: Object,
     },
   ],
+  info: [
+    {
+      type: Object,
+    },
+  ],
   routePermitDoc: {
     type: String,
     default: 'none',
